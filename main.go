@@ -13,10 +13,10 @@ type Job struct {
 	URL string
 	Success int
 	Try int
-	Err error
+	Err []error
 }
 
-func makeRequest(client *http.Client, job Job, ua string, jobs chan Job, results chan<- Job) error {
+func makeRequest(client *http.Client, job Job, ua string, jobs chan Job) error {
 	req, err := http.NewRequest("GET", job.URL, nil)
 	if err != nil {
 		return fmt.Errorf("unable to create request: %w", err)
@@ -44,7 +44,7 @@ func makeRequest(client *http.Client, job Job, ua string, jobs chan Job, results
 	return nil
 }
 
-func worker(id int, attempts *int, jobs chan Job, results chan<-Job, client *http.Client, ua string){
+func worker(attempts *int, jobs chan Job, results chan<-Job, client *http.Client, ua string){
 	for job := range jobs{
 		if job.Try >= *attempts {
 			results <- job
@@ -52,11 +52,11 @@ func worker(id int, attempts *int, jobs chan Job, results chan<-Job, client *htt
 		}
 		internalError := make(chan error, 1)
 		go func() {
-			internalError <- makeRequest(client, job, ua, jobs, results)
+			internalError <- makeRequest(client, job, ua, jobs)
 		}()
 		err := <-internalError
 		if err != nil {
-			job.Err = err
+			job.Err = append(job.Err, err)
 			job.Try++
 			jobs <- job
 		} else {
@@ -113,7 +113,7 @@ func main() {
 	userAgents := randomUA()
 
 	for w := 1; w <= 3; w++ {
-		go worker(w, attempts, jobs, results, client, userAgents[w-1])
+		go worker(attempts, jobs, results, client, userAgents[w-1])
 	}
 
 	for j := 1; j <= *attempts; j++ {
@@ -128,7 +128,6 @@ func main() {
 		if job.Err != nil {
 			fmt.Println("%w had the following error(s): %w", job.URL, job.Err)
 		}
-		fmt.Println("job:", job)
 	}
 
 	close(jobs)
