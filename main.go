@@ -93,7 +93,7 @@ func randomUA() []string {
 }
 
 func main() {
-	url := flag.String("url", "https://httpbin.org/status/200", "url for site check")
+	// url := flag.String("url", "https://httpbin.org/status/200", "url for site check")
 	attempts := flag.Int("attempts", 3, "number of attempts per website")
 	timeout := flag.Int("timeout", 5, "timeout for site check")
 	flag.Parse()
@@ -107,8 +107,18 @@ func main() {
 		},
 	}
 
-	jobs := make(chan Job, *attempts)
-	results := make(chan Job, *attempts)
+	urlSlice := []string{
+		"http://httpbin.org/status/404",
+		"http://httpbin.org/status/200",
+		"http://httpbin.org/status/302",
+		"http://httpbin.org/status/201",
+		"https://www.google.com",
+	}
+
+	numJobs := len(urlSlice)
+
+	jobs := make(chan Job, numJobs)
+	results := make(chan Job, numJobs)
 
 	userAgents := randomUA()
 
@@ -116,17 +126,24 @@ func main() {
 		go worker(attempts, jobs, results, client, userAgents[w-1])
 	}
 
-	for j := 1; j <= *attempts; j++ {
+	// for j := 1; j <= *attempts; j++ {
+	// 	jobs <- Job{
+	// 		URL: *url,
+	// 	}
+	// }
+	
+	for _, url := range urlSlice{
 		jobs <- Job{
-			URL: *url,
+			URL: url,
 		}
 	}
-	
-	for a := 1; a <= *attempts; a++ {
+
+	for a := 1; a <= numJobs; a++ {
 		job := <- results
-		fmt.Printf("Site probe for %s was successful %d out of %d attempts\n", job.URL, job.Success, *attempts)
+		fmt.Printf("\nRESULTS: %s", job.URL)
+		fmt.Printf("\nsite probe for was successful %d out of %d attempts\n", job.Success, *attempts)
 		if job.Err != nil {
-			fmt.Println("%w had the following error(s): %w", job.URL, job.Err)
+			fmt.Println("\nbut had the following error(s): %w\n", job.Err)
 		}
 	}
 
