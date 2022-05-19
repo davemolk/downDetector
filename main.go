@@ -11,31 +11,57 @@ import (
 
 type Job struct {
 	URL string
+	Success int
+	Try int
+	Err error
 }
 
-func worker(id int, jobs <-chan Job, results chan<-int, client *http.Client, ua string){
-	for j := range jobs{
-		req, err := http.NewRequest("GET", j.URL, nil)
-		log.Println("id, url:", id, j.URL)
-		if err != nil {
-			log.Fatal("Unable to create request", err)
-		}
-		
-		req.Header.Set("User-Agent", ua)
+func makeRequest(client *http.Client, job Job, ua string, jobs chan Job, results chan<- Job) error {
+	req, err := http.NewRequest("GET", job.URL, nil)
+	if err != nil {
+		return fmt.Errorf("unable to create request: %w", err)
+	}
+	
+	req.Header.Set("User-Agent", ua)
 
-		res, err := client.Do(req)
-		if err != nil {
-			log.Println("request unsuccessful so site probably down", id, err)
-			results <- 0
-			return
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request unsuccessful: %w", err)
+	}
+	
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		log.Println("site is down", res.StatusCode)
+		job.Try++
+		jobs <- job
+	} else {
+		log.Println("site is up", res.Status)
+		job.Success++
+		job.Try++
+		jobs <- job
+	}
+	return nil
+}
+
+func worker(id int, attempts *int, jobs chan Job, results chan<-Job, client *http.Client, ua string){
+	for job := range jobs{
+		if job.Try >= *attempts {
+			results <- job
+			continue
 		}
-		
-		if res.StatusCode != 200 {
-			log.Println("site is down", id, res.StatusCode)
-			results <- 0
+		internalError := make(chan error, 1)
+		go func() {
+			internalError <- makeRequest(client, job, ua, jobs, results)
+		}()
+		err := <-internalError
+		if err != nil {
+			job.Err = err
+			job.Try++
+			jobs <- job
 		} else {
-			log.Println("site is up", id, res.Status)
-			results <- 1
+			job.Err = nil
+			job.Try++
 		}
 	}
 }
@@ -71,6 +97,8 @@ func main() {
 	attempts := flag.Int("attempts", 3, "number of attempts per website")
 	timeout := flag.Int("timeout", 5, "timeout for site check")
 	flag.Parse()
+	
+	start := time.Now()
 
 	client := &http.Client{
 		Timeout: time.Duration(*timeout) * time.Second,
@@ -80,12 +108,12 @@ func main() {
 	}
 
 	jobs := make(chan Job, *attempts)
-	results := make(chan int, *attempts)
+	results := make(chan Job, *attempts)
 
 	userAgents := randomUA()
 
 	for w := 1; w <= 3; w++ {
-		go worker(w, jobs, results, client, userAgents[w-1])
+		go worker(w, attempts, jobs, results, client, userAgents[w-1])
 	}
 
 	for j := 1; j <= *attempts; j++ {
@@ -93,15 +121,18 @@ func main() {
 			URL: *url,
 		}
 	}
-	close(jobs)
-
-	healthScore := 0
-
+	
 	for a := 1; a <= *attempts; a++ {
-		curr := <- results
-		healthScore += curr
-		fmt.Println("here is the healthScore:", healthScore)
+		job := <- results
+		fmt.Printf("Site probe for %s was successful %d out of %d attempts\n", job.URL, job.Success, *attempts)
+		if job.Err != nil {
+			fmt.Println("%w had the following error(s): %w", job.URL, job.Err)
+		}
+		fmt.Println("job:", job)
 	}
 
-	fmt.Printf("Site probe was successful %d out of %d attempts", healthScore, *attempts)
+	close(jobs)
+	close(results)
+
+	fmt.Printf("\ntook: %f seconds\n", time.Since(start).Seconds())
 }
