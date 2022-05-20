@@ -13,10 +13,10 @@ import (
 )
 
 type Job struct {
-	URL string
+	URL     string
 	Success int
-	Try int
-	Err []error
+	Try     int
+	Err     []error
 }
 
 func makeRequest(client *http.Client, job Job, ua string, jobs chan Job) error {
@@ -24,14 +24,14 @@ func makeRequest(client *http.Client, job Job, ua string, jobs chan Job) error {
 	if err != nil {
 		return fmt.Errorf("unable to create request: %w", err)
 	}
-	
+
 	req.Header.Set("User-Agent", ua)
 
 	res, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("request unsuccessful: %w", err)
 	}
-	
+
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
@@ -47,8 +47,8 @@ func makeRequest(client *http.Client, job Job, ua string, jobs chan Job) error {
 	return nil
 }
 
-func worker(attempts *int, jobs chan Job, results chan<-Job, client *http.Client, ua string){
-	for job := range jobs{
+func worker(attempts *int, jobs chan Job, results chan<- Job, client *http.Client, ua string) {
+	for job := range jobs {
 		if job.Try >= *attempts {
 			results <- job
 			continue
@@ -98,7 +98,6 @@ func getUA() []string {
 	}
 }
 
-
 func readLines(r io.Reader) ([]string, error) {
 	var lines []string
 	scanner := bufio.NewScanner(r)
@@ -114,7 +113,7 @@ func main() {
 	attempts := flag.Int("attempts", 3, "number of attempts per website")
 	timeout := flag.Int("timeout", 5, "timeout for site check")
 	flag.Parse()
-	
+
 	start := time.Now()
 
 	client := &http.Client{
@@ -125,11 +124,11 @@ func main() {
 	}
 
 	var urls []string
-	
+
 	if *url != "" {
 		urls = append(urls, *url)
-	} 
-	
+	}
+
 	if *inputFile != "" {
 		f, err := os.Open(*inputFile)
 		if err != nil {
@@ -143,7 +142,7 @@ func main() {
 		}
 		urls = append(urls, lines...)
 	}
-	
+
 	fmt.Println("URLS", urls)
 
 	numJobs := len(urls)
@@ -156,15 +155,15 @@ func main() {
 	for w := 1; w <= 3; w++ {
 		go worker(attempts, jobs, results, client, userAgents[w-1])
 	}
-	
-	for _, url := range urls{
+
+	for _, url := range urls {
 		jobs <- Job{
 			URL: url,
 		}
 	}
 
 	for a := 1; a <= numJobs; a++ {
-		job := <- results
+		job := <-results
 		fmt.Printf("\nRESULTS: %s", job.URL)
 		fmt.Printf("\nsite probe for was successful %d out of %d attempts\n", job.Success, *attempts)
 		if job.Err != nil {
