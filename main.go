@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -93,7 +96,8 @@ func randomUA() []string {
 }
 
 func main() {
-	// url := flag.String("url", "https://httpbin.org/status/200", "url for site check")
+	url := flag.String("url", "", "url for site check")
+	inputFile := flag.String("input", "", "use a file with urls")
 	attempts := flag.Int("attempts", 3, "number of attempts per website")
 	timeout := flag.Int("timeout", 5, "timeout for site check")
 	flag.Parse()
@@ -107,15 +111,29 @@ func main() {
 		},
 	}
 
-	urlSlice := []string{
-		"http://httpbin.org/status/404",
-		"http://httpbin.org/status/200",
-		"http://httpbin.org/status/302",
-		"http://httpbin.org/status/201",
-		"https://www.google.com",
-	}
+	var urls []string
+	
+	if *url != "" {
+		urls = append(urls, *url)
+	} 
+	
+	if *inputFile != "" {
+		f, err := os.Open(*inputFile)
+		if err != nil {
+			log.Fatal("Couldn't open input file: %w", err)
+		}
+		defer f.Close()
 
-	numJobs := len(urlSlice)
+		lines, err := readLines(f)
+		if err != nil {
+			log.Fatal("Couldn't read input file: %w", err)
+		}
+		urls = append(urls, lines...)
+	}
+	
+	fmt.Println("URLS", urls)
+
+	numJobs := len(urls)
 
 	jobs := make(chan Job, numJobs)
 	results := make(chan Job, numJobs)
@@ -132,7 +150,7 @@ func main() {
 	// 	}
 	// }
 	
-	for _, url := range urlSlice{
+	for _, url := range urls{
 		jobs <- Job{
 			URL: url,
 		}
@@ -151,4 +169,13 @@ func main() {
 	close(results)
 
 	fmt.Printf("\ntook: %f seconds\n", time.Since(start).Seconds())
+}
+
+func readLines(r io.Reader) ([]string, error) {
+	var lines []string
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	return lines, scanner.Err()
 }

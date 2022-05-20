@@ -1,0 +1,5 @@
+http://httpbin.org/status/404
+http://httpbin.org/status/200
+http://httpbin.org/status/302
+http://httpbin.org/status/201
+https://www.google.com
