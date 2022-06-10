@@ -19,27 +19,29 @@ type Job struct {
 	Err     []error
 }
 
-func makeRequest(client *http.Client, job Job, ua string, jobs chan Job) error {
+// makeRequest makes a GET request to a specified URL, tracking the success, current
+// number of attempts, and any errors.
+func makeRequest(client *http.Client, job Job, jobs chan Job) error {
 	req, err := http.NewRequest("GET", job.URL, nil)
 	if err != nil {
-		return fmt.Errorf("unable to create request: %w", err)
+		return fmt.Errorf("unable to create request for %s: %v", job.URL, err)
 	}
 
-	req.Header.Set("User-Agent", ua)
+	uAgent := randomUA()
 
-	res, err := client.Do(req)
+	req.Header.Set("User-Agent", uAgent)
+
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("request unsuccessful: %w", err)
+		return fmt.Errorf("request unsuccessful for %s: %v", job.URL, err)
 	}
 
-	defer res.Body.Close()
+	defer resp.Body.Close()
 
-	if res.StatusCode != 200 {
-		log.Println("site is down", res.StatusCode)
+	if resp.StatusCode != 200 {
 		job.Try++
 		jobs <- job
 	} else {
-		log.Println("site is up", res.Status)
 		job.Success++
 		job.Try++
 		jobs <- job
@@ -47,7 +49,8 @@ func makeRequest(client *http.Client, job Job, ua string, jobs chan Job) error {
 	return nil
 }
 
-func worker(attempts *int, jobs chan Job, results chan<- Job, client *http.Client, ua string) {
+// worker handles the makeRequest goroutines, their results, and any errors that occur
+func worker(attempts *int, jobs chan Job, results chan<- Job, client *http.Client) {
 	for job := range jobs {
 		if job.Try >= *attempts {
 			results <- job
@@ -55,7 +58,7 @@ func worker(attempts *int, jobs chan Job, results chan<- Job, client *http.Clien
 		}
 		internalError := make(chan error, 1)
 		go func() {
-			internalError <- makeRequest(client, job, ua, jobs)
+			internalError <- makeRequest(client, job, jobs)
 		}()
 		err := <-internalError
 		if err != nil {
@@ -69,21 +72,16 @@ func worker(attempts *int, jobs chan Job, results chan<- Job, client *http.Clien
 	}
 }
 
-func randomUA() []string {
+// randomUA returns a user agent randomly drawn from six possibilities.
+func randomUA() string {
 	userAgents := getUA()
 	r := rand.New(rand.NewSource(time.Now().Unix()))
-	for i := 0; i < len(userAgents); i++ {
-		j := r.Intn(len(userAgents))
+	rando := r.Intn(len(userAgents))
 
-		ua1 := userAgents[i]
-		ua2 := userAgents[j]
-		userAgents[i] = ua2
-		userAgents[j] = ua1
-	}
-
-	return userAgents
+	return userAgents[rando]
 }
 
+// getUA returns a string slice of six user agents.
 func getUA() []string {
 	return []string{
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36",
@@ -98,6 +96,7 @@ func getUA() []string {
 	}
 }
 
+// readLines converts the contents of an input text file to a string slice.
 func readLines(r io.Reader) ([]string, error) {
 	var lines []string
 	scanner := bufio.NewScanner(r)
@@ -105,6 +104,32 @@ func readLines(r io.Reader) ([]string, error) {
 		lines = append(lines, scanner.Text())
 	}
 	return lines, scanner.Err()
+}
+
+// makeClient takes in a flag-specified timeout and returns an *http.Client.
+func makeClient(timeout int) *http.Client {
+	return &http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// getUrls takes in the name of an input file and returns a string slice of its contents (and any errors)
+func getUrls(inputFile string) ([]string, error) {
+	f, err := os.Open(inputFile)
+	if err != nil {
+		return []string{}, fmt.Errorf("unable to open input file: %v", err)
+	}
+	defer f.Close()
+
+	lines, err := readLines(f)
+	if err != nil {
+		return []string{}, fmt.Errorf("unable to read input file: %v", err)
+	}
+
+	return lines, nil
 }
 
 func main() {
@@ -116,12 +141,7 @@ func main() {
 
 	start := time.Now()
 
-	client := &http.Client{
-		Timeout: time.Duration(*timeout) * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := makeClient(*timeout)
 
 	var urls []string
 
@@ -130,30 +150,22 @@ func main() {
 	}
 
 	if *inputFile != "" {
-		f, err := os.Open(*inputFile)
+		fileUrls, err := getUrls(*inputFile)
 		if err != nil {
-			log.Fatal("Couldn't open input file: %w", err)
+			log.Fatalf("unable to read file: %v", err)
 		}
-		defer f.Close()
-
-		lines, err := readLines(f)
-		if err != nil {
-			log.Fatal("Couldn't read input file: %w", err)
-		}
-		urls = append(urls, lines...)
+		urls = fileUrls
 	}
 
-	fmt.Println("URLS", urls)
+	fmt.Println("Probing:", urls)
 
 	numJobs := len(urls)
 
 	jobs := make(chan Job, numJobs)
 	results := make(chan Job, numJobs)
 
-	userAgents := randomUA()
-
 	for w := 1; w <= 3; w++ {
-		go worker(attempts, jobs, results, client, userAgents[w-1])
+		go worker(attempts, jobs, results, client)
 	}
 
 	for _, url := range urls {
@@ -165,9 +177,9 @@ func main() {
 	for a := 1; a <= numJobs; a++ {
 		job := <-results
 		fmt.Printf("\nRESULTS: %s", job.URL)
-		fmt.Printf("\nsite probe for was successful %d out of %d attempts\n", job.Success, *attempts)
+		fmt.Printf("\nsite probe was successful %d out of %d attempts\n", job.Success, *attempts)
 		if job.Err != nil {
-			fmt.Println("\nbut had the following error(s): %w\n", job.Err)
+			fmt.Printf("\nbut had the following error(s): %v\n", job.Err)
 		}
 	}
 
