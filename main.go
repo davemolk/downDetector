@@ -13,7 +13,7 @@ import (
 )
 
 // Job struct contains information about the success, attempt number, and errors
-// associated with each website probed
+// associated with each website scanned
 type Job struct {
 	URL     string
 	Success int
@@ -159,7 +159,7 @@ func main() {
 		urls = fileUrls
 	}
 
-	fmt.Println("Probing:", urls)
+	fmt.Println("Scanning:", urls)
 
 	numJobs := len(urls)
 
