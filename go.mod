@@ -1,3 +1,3 @@
-module github.com/davemolk/goScanner
+module github.com/davemolk/goCheckSites
 
 go 1.18
