@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+// Job struct contains information about the success, attempt number, and errors
+// associated with each website probed
 type Job struct {
 	URL     string
 	Success int
@@ -164,7 +166,7 @@ func main() {
 	jobs := make(chan Job, numJobs)
 	results := make(chan Job, numJobs)
 
-	for w := 1; w <= 3; w++ {
+	for w := 1; w <= numJobs; w++ {
 		go worker(attempts, jobs, results, client)
 	}
 
