@@ -143,9 +143,27 @@ func main() {
 
 	start := time.Now()
 
-	client := makeClient(*timeout)
-
 	var urls []string
+
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		fmt.Printf("Stdin path error: %v", err)
+	}
+
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		s := bufio.NewScanner(os.Stdin)
+		for s.Scan() {
+			urls = append(urls, s.Text())
+		}
+		if err := s.Err(); err != nil {	
+			fmt.Printf("unable to read Stdin: %v", err)
+		}
+		if len(urls) > 0 {
+			log.Println("urls received")
+		}
+	}
+
+	client := makeClient(*timeout)
 
 	if *url != "" {
 		urls = append(urls, *url)
