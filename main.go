@@ -135,10 +135,10 @@ func getUrls(inputFile string) ([]string, error) {
 }
 
 func main() {
-	url := flag.String("url", "", "url for site check")
-	inputFile := flag.String("input", "", "use a file with urls")
-	attempts := flag.Int("attempts", 3, "number of attempts per website")
-	timeout := flag.Int("timeout", 5, "timeout for site check")
+	url := flag.String("u", "", "url for site check")
+	inputFile := flag.String("i", "", "use a file with urls")
+	attempts := flag.Int("a", 3, "number of attempts per website")
+	timeout := flag.Int("t", 5, "timeout for site check")
 	flag.Parse()
 
 	start := time.Now()
