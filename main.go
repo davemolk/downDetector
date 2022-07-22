@@ -77,7 +77,7 @@ func worker(attempts *int, jobs chan Job, results chan<- Job, client *http.Clien
 // randomUA returns a user agent randomly drawn from six possibilities.
 func randomUA() string {
 	userAgents := getUA()
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	rando := r.Intn(len(userAgents))
 
 	return userAgents[rando]
