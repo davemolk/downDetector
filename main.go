@@ -118,8 +118,8 @@ func makeClient(timeout int) *http.Client {
 	}
 }
 
-// getUrls takes in the name of an input file and returns a string slice of its contents (and any errors)
-func getUrls(inputFile string) ([]string, error) {
+// getURLs takes in the name of an input file and returns a string slice of its contents (and any errors)
+func getURLs(inputFile string) ([]string, error) {
 	f, err := os.Open(inputFile)
 	if err != nil {
 		return []string{}, fmt.Errorf("unable to open input file: %v", err)
@@ -155,7 +155,7 @@ func main() {
 		for s.Scan() {
 			urls = append(urls, s.Text())
 		}
-		if err := s.Err(); err != nil {	
+		if err := s.Err(); err != nil {
 			fmt.Printf("unable to read Stdin: %v", err)
 		}
 		if len(urls) > 0 {
@@ -170,11 +170,11 @@ func main() {
 	}
 
 	if *inputFile != "" {
-		fileUrls, err := getUrls(*inputFile)
+		fileURLs, err := getURLs(*inputFile)
 		if err != nil {
 			log.Fatalf("unable to read file: %v", err)
 		}
-		urls = fileUrls
+		urls = fileURLs
 	}
 
 	fmt.Println("Scanning:", urls)
